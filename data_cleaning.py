@@ -1,7 +1,3 @@
-# ============================================================
-# data_cleaning.py — Step 1: Load and clean raw CSV
-# ============================================================
-
 import pandas as pd
 from utils import setup_logger, save_csv
 from config import RAW_DATA
@@ -51,14 +47,13 @@ def fix_categories(df: pd.DataFrame) -> pd.DataFrame:
     unmapped = df["category"].isna().sum()
     if unmapped:
         logger.warning(f"{unmapped} items had no category mapping — filled as 'Other'")
-        df["category"].fillna("Other", inplace=True)
+        df["category"] = df["category"].fillna("Other")
     return df
 
 
 def handle_nulls(df: pd.DataFrame) -> pd.DataFrame:
     before = df.isnull().sum().sum()
 
-    # Size: category-specific fill
     df.loc[df["category"] == "Electronics", "size"] = "Not Applicable"
     df.loc[df["category"] == "Accessories", "size"] = "Free Size"
     df.loc[df["category"] == "Footwear",    "size"] = "Numeric"
@@ -70,17 +65,14 @@ def handle_nulls(df: pd.DataFrame) -> pd.DataFrame:
     )
     df.loc[(df["category"] == "Clothing") & df["size"].isna(), "size"] = clothing_mode
 
-    # Review rating: item-level mean
     df["review_rating"] = df["review_rating"].fillna(
         df.groupby("item_purchased")["review_rating"].transform("mean")
     ).round(2)
 
-    # Purchase amount: item-level mean
     df["purchase_amount"] = df["purchase_amount"].fillna(
         df.groupby("item_purchased")["purchase_amount"].transform("mean")
     ).round(2)
 
-    # Previous purchases: 0 for unknowns
     df["previous_purchases"] = df["previous_purchases"].fillna(0).astype(int)
 
     after = df.isnull().sum().sum()

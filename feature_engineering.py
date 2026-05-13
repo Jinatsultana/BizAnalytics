@@ -1,7 +1,3 @@
-# ============================================================
-# feature_engineering.py — Step 2: RFM, CLV, Churn, Segments
-# ============================================================
-
 import pandas as pd
 import numpy as np
 from sklearn.preprocessing import StandardScaler
@@ -21,13 +17,6 @@ logger = setup_logger("feature_engineering")
 # ── RFM Scoring ──────────────────────────────────────────────
 
 def add_rfm_scores(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Since we have no transaction dates, we use proxy metrics:
-      R (Recency)   → inverse of purchase frequency rank
-                      (Weekly = most recent feel, Annually = least)
-      F (Frequency) → previous_purchases
-      M (Monetary)  → purchase_amount
-    """
     logger.info("Calculating RFM scores...")
 
     freq_rank = {
@@ -37,30 +26,25 @@ def add_rfm_scores(df: pd.DataFrame) -> pd.DataFrame:
     }
     df["recency_proxy"] = df["frequency_of_purchases"].map(freq_rank).fillna(3)
 
-    # Score each axis 1–5 using quantile cuts
-    df["r_score"] = pd.qcut(df["recency_proxy"],    q=RFM_QUANTILES, labels=False, duplicates="drop") + 1
+    df["r_score"] = pd.qcut(df["recency_proxy"],     q=RFM_QUANTILES, labels=False, duplicates="drop") + 1
     df["f_score"] = pd.qcut(df["previous_purchases"], q=RFM_QUANTILES, labels=False, duplicates="drop") + 1
-    df["m_score"] = pd.qcut(df["purchase_amount"],   q=RFM_QUANTILES, labels=False, duplicates="drop") + 1
+    df["m_score"] = pd.qcut(df["purchase_amount"],    q=RFM_QUANTILES, labels=False, duplicates="drop") + 1
 
-    # Fill any NaN scores with median (can happen at boundaries)
     for col in ["r_score", "f_score", "m_score"]:
         df[col] = df[col].fillna(3).astype(int)
 
-    # Composite RFM string key e.g. "545"
     df["rfm_score"] = (
         df["r_score"].astype(str)
         + df["f_score"].astype(str)
         + df["m_score"].astype(str)
     )
 
-    # Total RFM value (weighted: M matters most for revenue)
     df["rfm_total"] = (
         df["r_score"] * 0.25
         + df["f_score"] * 0.30
         + df["m_score"] * 0.45
     ).round(2)
 
-    # Named segment
     df["rfm_segment"] = df["rfm_score"].map(RFM_SEGMENT_MAP).fillna(
         df["rfm_total"].apply(_fallback_segment)
     )
@@ -84,22 +68,16 @@ def _fallback_segment(score: float) -> str:
 # ── Customer Lifetime Value ───────────────────────────────────
 
 def add_clv(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    CLV = (Average Order Value × Purchase Frequency) × Customer Lifespan
-    Discounted CLV applies a yearly discount rate.
-    """
     logger.info("Calculating Customer Lifetime Value (CLV)...")
 
     df["annual_purchase_freq"] = df["frequency_of_purchases"].map(FREQUENCY_MAP).fillna(6)
 
-    # Simple CLV
     df["clv"] = (
         df["purchase_amount"]
         * df["annual_purchase_freq"]
         * AVG_CUSTOMER_LIFESPAN_YEARS
     ).round(2)
 
-    # Discounted CLV (accounts for time value of money)
     df["clv_discounted"] = (
         df["purchase_amount"]
         * df["annual_purchase_freq"]
@@ -107,7 +85,6 @@ def add_clv(df: pd.DataFrame) -> pd.DataFrame:
         / DISCOUNT_RATE
     ).round(2)
 
-    # CLV tier
     clv_pcts = df["clv"].quantile([0.33, 0.66])
     df["clv_tier"] = pd.cut(
         df["clv"],
@@ -126,9 +103,6 @@ def add_clv(df: pd.DataFrame) -> pd.DataFrame:
 # ── Churn Risk Flag ───────────────────────────────────────────
 
 def add_churn_flag(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Mark customers as 'High churn risk' if they show multiple at-risk signals.
-    """
     logger.info("Calculating churn risk flags...")
 
     low_purchases  = df["previous_purchases"] <= CHURN_MAX_PREV_PURCHASES
@@ -137,7 +111,6 @@ def add_churn_flag(df: pd.DataFrame) -> pd.DataFrame:
     low_rating     = df["review_rating"] < 3.0
     low_spend      = df["purchase_amount"] < df["purchase_amount"].quantile(0.25)
 
-    # Risk score: each flag adds 1 point
     df["churn_risk_score"] = (
         low_purchases.astype(int)
         + no_sub.astype(int)
@@ -160,21 +133,17 @@ def add_churn_flag(df: pd.DataFrame) -> pd.DataFrame:
 # ── KMeans Customer Segmentation ─────────────────────────────
 
 def add_kmeans_segments(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Cluster customers into N groups based on behavioural features.
-    """
     logger.info(f"Running KMeans clustering with k={N_CLUSTERS}...")
 
     features = ["purchase_amount", "previous_purchases", "review_rating", "rfm_total"]
     X = df[features].fillna(0)
 
-    scaler  = StandardScaler()
+    scaler   = StandardScaler()
     X_scaled = scaler.fit_transform(X)
 
     km = KMeans(n_clusters=N_CLUSTERS, random_state=RANDOM_STATE, n_init=10)
     df["cluster_id"] = km.fit_predict(X_scaled)
 
-    # Name clusters by their centroid spend rank
     cluster_spend = (
         df.groupby("cluster_id")["purchase_amount"].mean().sort_values()
     )

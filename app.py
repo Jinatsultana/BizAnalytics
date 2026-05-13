@@ -18,11 +18,11 @@ from functools import wraps
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-prod-" + str(uuid.uuid4()))
 
-# FIX 1: Use /tmp for file writes on Vercel (only writable directory)
+# FIX 1: Use /tmp for writes — Vercel filesystem is read-only
 OUTPUT_FOLDER = Path("/tmp/outputs")
 OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
 
-# FIX 2: Use __file__ to get the absolute base path (works on Vercel)
+# FIX 2: Absolute base path so CSV is always found on Vercel
 BASE_DIR = Path(__file__).parent.resolve()
 
 @app.template_filter("format_number")
@@ -35,7 +35,7 @@ def format_number(value):
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ── Demo users (replace with DB in prod) ─────────────────────
+# ── Demo users ───────────────────────────────────────────────
 USERS = {
     "admin@bizanalytics.com": {
         "name": "Admin",
@@ -71,7 +71,6 @@ def run_pipeline_on_df(df: pd.DataFrame) -> pd.DataFrame:
     from feature_engineering import (
         add_rfm_scores, add_clv, add_churn_flag, add_kmeans_segments
     )
-
     df = standardise_columns(df)
     df = fix_categories(df)
     df = handle_nulls(df)
@@ -91,42 +90,24 @@ def compute_analytics(df: pd.DataFrame) -> dict:
     high_churn_pct  = round((df["churn_risk"] == "High").sum() / total_customers * 100, 1)
 
     rfm_dist = df["rfm_segment"].value_counts().head(8)
-    rfm_chart = {
-        "labels": rfm_dist.index.tolist(),
-        "values": rfm_dist.values.tolist(),
-    }
+    rfm_chart = {"labels": rfm_dist.index.tolist(), "values": rfm_dist.values.tolist()}
 
     clv_tier = df.groupby("clv_tier", observed=True)["clv"].mean().round(2)
-    clv_chart = {
-        "labels": clv_tier.index.astype(str).tolist(),
-        "values": clv_tier.values.tolist(),
-    }
+    clv_chart = {"labels": clv_tier.index.astype(str).tolist(), "values": clv_tier.values.tolist()}
 
     churn_dist = df["churn_risk"].value_counts()
-    churn_chart = {
-        "labels": churn_dist.index.astype(str).tolist(),
-        "values": churn_dist.values.tolist(),
-    }
+    churn_chart = {"labels": churn_dist.index.astype(str).tolist(), "values": churn_dist.values.tolist()}
 
     cat_rev = df.groupby("category")["purchase_amount"].sum().sort_values(ascending=False)
-    category_chart = {
-        "labels": cat_rev.index.tolist(),
-        "values": cat_rev.round(2).values.tolist(),
-    }
+    category_chart = {"labels": cat_rev.index.tolist(), "values": cat_rev.round(2).values.tolist()}
 
     seg_dist = df["customer_segment"].value_counts()
-    segment_chart = {
-        "labels": seg_dist.index.tolist(),
-        "values": seg_dist.values.tolist(),
-    }
+    segment_chart = {"labels": seg_dist.index.tolist(), "values": seg_dist.values.tolist()}
 
     age_bins = pd.cut(df["age"], bins=[0, 25, 35, 45, 55, 100],
-                      labels=["18–25", "26–35", "36–45", "46–55", "55+"])
+                      labels=["18-25", "26-35", "36-45", "46-55", "55+"])
     age_dist = age_bins.value_counts().sort_index()
-    age_chart = {
-        "labels": age_dist.index.astype(str).tolist(),
-        "values": age_dist.values.tolist(),
-    }
+    age_chart = {"labels": age_dist.index.astype(str).tolist(), "values": age_dist.values.tolist()}
 
     top_customers = (
         df.nlargest(10, "clv")[
@@ -138,10 +119,7 @@ def compute_analytics(df: pd.DataFrame) -> dict:
     )
 
     freq_dist = df["frequency_of_purchases"].value_counts()
-    freq_chart = {
-        "labels": freq_dist.index.tolist(),
-        "values": freq_dist.values.tolist(),
-    }
+    freq_chart = {"labels": freq_dist.index.tolist(), "values": freq_dist.values.tolist()}
 
     return {
         "kpis": {
@@ -218,7 +196,7 @@ def dashboard():
 @login_required
 def run_demo():
     """Run the pipeline on the bundled sample dataset."""
-    # FIX 3: Use absolute path relative to this file
+    # FIX 3: Use absolute path to find the CSV
     demo_path = BASE_DIR / "customer_shopping_behavior.csv"
     if not demo_path.exists():
         flash("Demo dataset not found.", "error")
@@ -229,14 +207,17 @@ def run_demo():
         df = run_pipeline_on_df(df)
         analytics = compute_analytics(df)
 
-        # FIX 4: Convert analytics to JSON-serializable types before storing in session
+        # FIX 4: Sanitize before storing in session (avoid non-serializable types)
         analytics = json.loads(json.dumps(analytics, default=str))
         session["analytics"] = analytics
 
         # FIX 5: Write to /tmp instead of local outputs folder
         out_path = OUTPUT_FOLDER / "demo_enriched.csv"
-        df.to_csv(out_path, index=False)
-        session["enriched_file"] = str(out_path)
+        try:
+            df.to_csv(out_path, index=False)
+            session["enriched_file"] = str(out_path)
+        except (OSError, PermissionError):
+            pass  # Non-critical: skip file save if filesystem is restricted
 
         flash(f"✔ Demo pipeline complete — {analytics['row_count']:,} customers processed.", "success")
     except Exception as e:
@@ -255,6 +236,6 @@ def api_analytics():
     return jsonify(analytics)
 
 
-# FIX 6: Expose app for Vercel serverless (do NOT call app.run() at module level)
+# FIX 6: Only run dev server when called directly — not on Vercel import
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
