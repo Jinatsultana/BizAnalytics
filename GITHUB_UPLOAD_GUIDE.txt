@@ -1,0 +1,135 @@
+# GitHub Upload Guide — Clean Fresh Upload
+
+Follow these steps exactly to delete the old repo content and upload a clean version.
+
+---
+
+## Step 1 — Delete the old repository (cleanest approach)
+
+1. Go to your repo on GitHub
+2. Click **Settings** (top right of the repo)
+3. Scroll all the way down to **Danger Zone**
+4. Click **Delete this repository**
+5. Type the repo name to confirm → Delete
+6. Go to github.com → click **New** → recreate the repo with the same name
+7. Keep it **Public**, add NO README or .gitignore (we have our own)
+
+---
+
+## Step 2 — Delete the junk files from your local folder
+
+In your project folder, delete these files manually:
+
+```
+buy.gif
+customer-care (1).gif
+fast-forward.gif
+feedback.gif
+money-flow.gif
+reset.gif
+shopping-bag.gif
+shopping-cart.gif
+wallet.gif
+ChatGPT Image Mar 23, 2026, 09_50_55 PM.png
+pngtree-3d-online-shopping-and-e-commerce-concept-icon-png-image_21545061.png
+Business Problem -Customer Behaviour Analysis.pdf
+Customer-Behaviour-Analysis.pdf
+Report-Customer Behaviour Analysis.pdf
+data_analyst_portfolio_project.ipynb
+```
+
+---
+
+## Step 3 — Copy the new files into your folder
+
+Copy these files from the production_upgrade zip into your project folder:
+
+```
+config.py               ← replace old one
+data_cleaning.py        ← new file
+feature_engineering.py  ← new file
+db_loader.py            ← new file
+run_pipeline.py         ← new file
+utils.py                ← new file
+ADVANCED_SQL_QUERIES.sql ← new file
+DAX_MEASURES.md         ← new file
+README.md               ← replace old one
+requirements.txt        ← replace old one
+.gitignore              ← new file (from this zip)
+```
+
+---
+
+## Step 4 — Your final folder should look like this
+
+```
+cusotmer_behaviour_analysis/
+├── .gitignore
+├── README.md
+├── requirements.txt
+│
+├── config.py
+├── utils.py
+├── data_cleaning.py
+├── feature_engineering.py
+├── db_loader.py
+├── run_pipeline.py
+│
+├── BUSINESS_INSIGHTS.sql
+├── ADVANCED_SQL_QUERIES.sql
+├── DAX_MEASURES.md
+│
+├── customer_shopping_behavior.csv
+└── Customer_behaviour_analysis.pbix
+```
+
+---
+
+## Step 5 — Push to GitHub using Git Bash / terminal
+
+Open Git Bash inside your project folder and run these commands one by one:
+
+```bash
+git init
+git add .
+git commit -m "feat: production-grade pipeline with RFM, CLV, churn analysis"
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
+git push -u origin main
+```
+
+Replace YOUR_USERNAME and YOUR_REPO_NAME with your actual GitHub details.
+
+---
+
+## Step 6 — Add a good commit message description
+
+When GitHub asks or if you want a fuller commit message, use this:
+
+```
+feat: production-grade pipeline with RFM, CLV, churn analysis
+
+- Modular Python pipeline: data_cleaning → feature_engineering → db_loader
+- RFM scoring: 10 named customer segments (Champions, At Risk, Lost, etc.)
+- Customer Lifetime Value (CLV) — simple + discounted calculation
+- Churn risk scoring using 5 behavioural signals
+- KMeans customer segmentation (4 clusters)
+- 6 advanced SQL queries + 2 stored procedures added
+- 4 SQL views pre-built for Power BI connections
+- 20+ Power BI DAX measures documented
+- Professional README with key findings and architecture diagram
+- Removed decorative GIFs and redundant PDFs
+```
+
+---
+
+## One important note about config.py
+
+Before pushing, open config.py and make sure this line has a placeholder,
+not your real server name:
+
+```python
+SQL_SERVER = r"YOUR_SERVER\SQLEXPRESS01"   # <-- keep this as placeholder
+```
+
+Never push your real server name or any credentials to a public GitHub repo.

@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+venv/
+.venv/
+
+# Logs and outputs (generated at runtime — not needed in repo)
+logs/
+outputs/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Jupyter notebooks (replaced by modular Python scripts)
+*.ipynb
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# IMPORTANT: Never commit your SQL Server credentials.
+# Keep config.py local and update SQL_SERVER value yourself.
