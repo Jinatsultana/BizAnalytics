@@ -18,8 +18,12 @@ from functools import wraps
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-in-prod-" + str(uuid.uuid4()))
 
-OUTPUT_FOLDER = Path("outputs")
-OUTPUT_FOLDER.mkdir(exist_ok=True)
+# FIX 1: Use /tmp for file writes on Vercel (only writable directory)
+OUTPUT_FOLDER = Path("/tmp/outputs")
+OUTPUT_FOLDER.mkdir(parents=True, exist_ok=True)
+
+# FIX 2: Use __file__ to get the absolute base path (works on Vercel)
+BASE_DIR = Path(__file__).parent.resolve()
 
 @app.template_filter("format_number")
 def format_number(value):
@@ -57,9 +61,9 @@ def login_required(f):
     return decorated
 
 
-# ── Pipeline (adapted, no SQL Server dependency) ─────────────
+# ── Pipeline ─────────────────────────────────────────────────
 def run_pipeline_on_df(df: pd.DataFrame) -> pd.DataFrame:
-    """Run cleaning + feature engineering in memory — no SQL Server needed."""
+    """Run cleaning + feature engineering in memory."""
     from data_cleaning import (
         standardise_columns, fix_categories,
         handle_nulls, remove_duplicates
@@ -86,42 +90,36 @@ def compute_analytics(df: pd.DataFrame) -> dict:
     avg_clv         = round(df["clv"].mean(), 2)
     high_churn_pct  = round((df["churn_risk"] == "High").sum() / total_customers * 100, 1)
 
-    # RFM segment distribution
     rfm_dist = df["rfm_segment"].value_counts().head(8)
     rfm_chart = {
         "labels": rfm_dist.index.tolist(),
         "values": rfm_dist.values.tolist(),
     }
 
-    # CLV by tier
     clv_tier = df.groupby("clv_tier", observed=True)["clv"].mean().round(2)
     clv_chart = {
         "labels": clv_tier.index.astype(str).tolist(),
         "values": clv_tier.values.tolist(),
     }
 
-    # Churn risk breakdown
     churn_dist = df["churn_risk"].value_counts()
     churn_chart = {
         "labels": churn_dist.index.astype(str).tolist(),
         "values": churn_dist.values.tolist(),
     }
 
-    # Revenue by category
     cat_rev = df.groupby("category")["purchase_amount"].sum().sort_values(ascending=False)
     category_chart = {
         "labels": cat_rev.index.tolist(),
         "values": cat_rev.round(2).values.tolist(),
     }
 
-    # Customer segment distribution
     seg_dist = df["customer_segment"].value_counts()
     segment_chart = {
         "labels": seg_dist.index.tolist(),
         "values": seg_dist.values.tolist(),
     }
 
-    # Age distribution
     age_bins = pd.cut(df["age"], bins=[0, 25, 35, 45, 55, 100],
                       labels=["18–25", "26–35", "36–45", "46–55", "55+"])
     age_dist = age_bins.value_counts().sort_index()
@@ -130,7 +128,6 @@ def compute_analytics(df: pd.DataFrame) -> dict:
         "values": age_dist.values.tolist(),
     }
 
-    # Top 10 customers by CLV
     top_customers = (
         df.nlargest(10, "clv")[
             ["customer_id", "age", "gender", "clv", "rfm_segment",
@@ -140,7 +137,6 @@ def compute_analytics(df: pd.DataFrame) -> dict:
         .to_dict("records")
     )
 
-    # Purchase frequency breakdown
     freq_dist = df["frequency_of_purchases"].value_counts()
     freq_chart = {
         "labels": freq_dist.index.tolist(),
@@ -222,7 +218,8 @@ def dashboard():
 @login_required
 def run_demo():
     """Run the pipeline on the bundled sample dataset."""
-    demo_path = Path("customer_shopping_behavior.csv")
+    # FIX 3: Use absolute path relative to this file
+    demo_path = BASE_DIR / "customer_shopping_behavior.csv"
     if not demo_path.exists():
         flash("Demo dataset not found.", "error")
         return redirect(url_for("dashboard"))
@@ -231,8 +228,12 @@ def run_demo():
         df = pd.read_csv(demo_path)
         df = run_pipeline_on_df(df)
         analytics = compute_analytics(df)
+
+        # FIX 4: Convert analytics to JSON-serializable types before storing in session
+        analytics = json.loads(json.dumps(analytics, default=str))
         session["analytics"] = analytics
 
+        # FIX 5: Write to /tmp instead of local outputs folder
         out_path = OUTPUT_FOLDER / "demo_enriched.csv"
         df.to_csv(out_path, index=False)
         session["enriched_file"] = str(out_path)
@@ -254,6 +255,6 @@ def api_analytics():
     return jsonify(analytics)
 
 
-# Make sure this is at the bottom
+# FIX 6: Expose app for Vercel serverless (do NOT call app.run() at module level)
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True, port=5000)
