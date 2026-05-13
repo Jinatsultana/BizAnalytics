@@ -254,5 +254,6 @@ def api_analytics():
     return jsonify(analytics)
 
 
+# Make sure this is at the bottom
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    app.run()
