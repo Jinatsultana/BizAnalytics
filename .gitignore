@@ -25,3 +25,14 @@ desktop.ini
 
 # IMPORTANT: Never commit your SQL Server credentials.
 # Keep config.py local and update SQL_SERVER value yourself.
+__pycache__/
+.venv/
+venv/
+*.pyc
+*.pkl
+*.h5
+*.pt
+*.pth
+datasets/
+logs/
+.env
